@@ -10,7 +10,17 @@
 #include <vector>
 #include <ESP32Servo.h>
 #include <AccelStepper.h>
+#include <WiFi.h>
+#include <WiFiClient.h>
+#include <WebServer.h>
+#include <uri/UriBraces.h>
 
+#define WIFI_SSID "Wokwi-GUEST"
+#define WIFI_PASSWORD ""
+// Defining the WiFi channel speeds up the connection:
+#define WIFI_CHANNEL 6
+
+WebServer server(80);
 
 
 //definitions des pins
@@ -26,7 +36,7 @@
 #define ENDSTOP_Y_PIN 33
 #define ENDSTOP_Z_PIN 26
 #define homingButton 13
-#define DCY_PIN 32 //a changer
+#define DCY_PIN 12 
 
 //declaration des moteurs et servos
 AccelStepper stepperX(AccelStepper::DRIVER, X_STEP_PIN, X_DIR_PIN);
@@ -94,18 +104,27 @@ void afficherMatrice(std::vector<std::vector<int>> matrice);
 void verifierFinMatrices();
 bool trouverProchainePositionDansB(int &i, int &j);
 void fermerGripper();
-
 void homing();
+void sendHtml() ;
+void initialisationWifi();
+
+
 void setup() {
   Serial.begin(115200);
+  initialisationWifi();
   initialisationHardware();
   initialisationMatrices();
 
 }
 
 void loop() {
-  //si on appuie sur le bouton DCY, on met la variable marche a true et le cycle commence ou continue selon les cas 
+  server.handleClient();
 
+  //si on appuie sur le bouton DCY, on met la variable marche a true et le cycle commence ou continue selon les cas 
+    if (digitalRead(homingButton) == LOW ) {
+      marche = false;
+      homing();
+    }
     if (digitalRead(DCY_PIN) == LOW ) {
     marche = true;
     Serial.println("Démarrage du processus...");
@@ -251,6 +270,24 @@ void verifierFinMatrices(){
     return;
   }
 }
+
+void initialisationWifi(){
+  WiFi.begin(WIFI_SSID, WIFI_PASSWORD, WIFI_CHANNEL);
+  Serial.print("Connecting to WiFi ");
+  Serial.print(WIFI_SSID);
+  // Wait for connection
+  while (WiFi.status() != WL_CONNECTED) {
+    delay(100);
+    Serial.print(".");
+  }
+  Serial.println(" Connected!");
+
+  Serial.print("IP address: ");
+  Serial.println(WiFi.localIP());
+  server.on("/", sendHtml);
+  server.begin();
+  
+}
 void initialisationHardware(){
   //initialisation des moteurs
   stepperX.setMaxSpeed(1000);
@@ -388,4 +425,76 @@ void fermerGripper() {
   Serial.println("Gripper ferme");
   myservo.write(180);
   delay(500);
+}
+
+void homing(){
+
+  stepperX.moveTo(0);
+  stepperY.moveTo(0);
+  stepperZ.moveTo(0);
+
+  while(stepperX.distanceToGo() != 0 || stepperY.distanceToGo() != 0 || stepperZ.distanceToGo() != 0){
+    stepperX.run();
+    stepperY.run();
+    stepperZ.run();
+  }
+
+  // Homing X
+  while(digitalRead(ENDSTOP_X_PIN)==HIGH) {
+    stepperX.move(-1);
+    stepperX.run();
+  }
+  stepperX.setCurrentPosition(0);
+  
+
+  // Homing Y
+  while(digitalRead(ENDSTOP_Y_PIN)==HIGH) {
+    stepperY.move(-1);
+    stepperY.run();
+  }
+  stepperY.setCurrentPosition(0);
+
+  // Homing Z
+  while(digitalRead(ENDSTOP_Z_PIN)==HIGH) {
+    stepperZ.move(-1);
+    stepperZ.run();
+  }
+  stepperZ.setCurrentPosition(0);
+
+  Serial.println("Moteurs calibrés");
+}
+
+void sendHtml() {
+  String response = R"(
+    <!DOCTYPE html><html>
+      <head>
+        <title>ESP32 Web Server Demo</title>
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <style>
+          html { font-family: sans-serif; text-align: center; }
+          body { display: inline-flex; flex-direction: column; }
+          h1 { margin-bottom: 1.2em; } 
+          h2 { margin: 0; }
+          div { display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: auto auto; grid-auto-flow: column; grid-gap: 1em; }
+          .btn { background-color: #5B5; border: none; color: #fff; padding: 0.5em 1em;
+                 font-size: 2em; text-decoration: none }
+          .btn.OFF { background-color: #333; }
+        </style>
+      </head>
+            
+      <body>
+        <h1>ESP32 Web Server</h1>
+
+        <div>
+          <h2>LED 1</h2>
+          <a href="/toggle/1" class="btn LED1_TEXT">LED1_TEXT</a>
+          <h2>LED 2</h2>
+          <a href="/toggle/2" class="btn LED2_TEXT">LED2_TEXT</a>
+        </div>
+      </body>
+    </html>
+  )";
+  // response.replace("LED1_TEXT", led1State ? "ON" : "OFF");
+  // response.replace("LED2_TEXT", led2State ? "ON" : "OFF");
+  server.send(200, "text/html", response);
 }
