@@ -32,6 +32,7 @@
 AccelStepper stepperX(AccelStepper::DRIVER, X_STEP_PIN, X_DIR_PIN);
 AccelStepper stepperY(AccelStepper::DRIVER, Y_STEP_PIN, Y_DIR_PIN);
 AccelStepper stepperZ(AccelStepper::DRIVER, Z_STEP_PIN, Z_DIR_PIN);
+Servo myservo;  // create servo object to control a servo
 
 
 //declaration des variables
@@ -266,7 +267,7 @@ void initialisationHardware(){
   pinMode(homingButton, INPUT_PULLUP);
   pinMode(DCY_PIN, INPUT_PULLUP);
   //initialisation des servos
-
+  myservo.attach(27);
   
   // initialisation DCY button
   
@@ -358,6 +359,7 @@ void monterPince() {
 
 void deposerBouchon() {
   Serial.println("Gripper ouvre (simulé)");
+  myservo.write(0);
   delay(500);
 }
 
@@ -384,5 +386,6 @@ void afficherMatrice(std::vector<std::vector<int>> matrice){
 
 void fermerGripper() {
   Serial.println("Gripper ferme");
+  myservo.write(180);
   delay(500);
 }
