@@ -37,14 +37,15 @@ AccelStepper stepperZ(AccelStepper::DRIVER, Z_STEP_PIN, Z_DIR_PIN);
 //declaration des variables
 int marche=false;
 //nbre de pas par mm pour chaque moteur (prévoir de les acquerrer depuis l'interface web)
-int nbre_pas_par_mm_pour_stepperX=100;
-int nbre_pas_par_mm_pour_stepperY=50;
-int nbre_pas_par_mm_pour_stepperZ=20;
+int nbre_pas_par_mm_pour_stepperX=10;
+int nbre_pas_par_mm_pour_stepperY=5;
+int nbre_pas_par_mm_pour_stepperZ=2;
 
 // Debounce variables
 unsigned long lastDebounceTime1 = 0;
 unsigned long lastDebounceTime2 = 0;
 const unsigned long debounceDelay = 50; 
+bool bouchonAttrappe=false;
 
 //dimension de la matrice A
 int MA = 10;
@@ -52,8 +53,8 @@ int NA = 10;
 std::vector<std::vector<int>> matriceA(MA, std::vector<int>(NA));
 
 //dimension de la matrice B
-int MB = 4;
-int NB = 5;
+int MB = 2;
+int NB = 3;
 std::vector<std::vector<int>> matriceB(MB, std::vector<int>(NB));
 
 //les pas entre deux positions pour A et B en mm (prévoir de les calculer en pas) (prévoir de les acquérir depuis l'interface web)
@@ -102,37 +103,68 @@ void setup() {
 }
 
 void loop() {
-  //si on appuie sur le bouton DCY, on met la variable marche a true et le cycle commence 
-  
-  
-  if (digitalRead(DCY_PIN) == LOW ) {
+  //si on appuie sur le bouton DCY, on met la variable marche a true et le cycle commence ou continue selon les cas 
+
+    if (digitalRead(DCY_PIN) == LOW ) {
     marche = true;
     Serial.println("Démarrage du processus...");
   }
 
-  //Vérifier si la matrice A ou B est atteinte
+  if(!trouverProchainePositionDansB(posB_i, posB_j)&&digitalRead(DCY_PIN) == LOW){
+    Serial.println("La matrice B:");
+    posB_i=0;
+    posB_j=0;
+  for(int i=0; i<MB; i++){
+    for(int j=0; j<NB; j++){
+
+      //initialisation de la matrice B
+      if ((i+j)%3==0 )
+        matriceB[i][j]=1;
+      else
+        matriceB[i][j]=0;
+        Serial.print(matriceB[i][j]);
+        Serial.print(" ");
+    }
+    Serial.println();
+  }
+  }
+  
   if (marche == true) {
+    //Vérifier si la matrice A ou B est atteinte
     verifierFinMatrices();
 
 
-    // Aller à A[posA_i][posA_j]
-    // gotoPositionA(posA_i, posA_j);
-    // afficherPosition();
-
+    //Vérifier si la matrice A contient un bouchon à l'emplacement actuel
     if (matriceA[posA_i][posA_j] == 1) {
       
       // Aller à A[posA_i][posA_j]
       
-
-
       Serial.println("Aller à la position suivante dans la matrice A");
       Serial.print(posA_i);
       Serial.print(", "); 
       Serial.print(posA_j);
       Serial.println();
 
-      gotoPositionA(posA_i, posA_j);
-      attraperBouchon();
+      if(bouchonAttrappe == false){
+        gotoPositionA(posA_i, posA_j);
+        attraperBouchon();
+        bouchonAttrappe = true;
+         // Marquer la case A comme vide
+        matriceA[posA_i][posA_j] = 0;
+
+        // Avancer dans matrice A
+       
+        posA_j++;
+        if (posA_j >= NA) {
+            posA_j = 0;
+            posA_i++;
+        }
+
+      }
+      
+
+     
+
       // Chercher l'emplacement suivant avec un 1 dans matriceB
       if (trouverProchainePositionDansB(posB_i, posB_j)) {
 
@@ -144,9 +176,10 @@ void loop() {
         Serial.println();
 
         gotoPositionB(posB_i, posB_j);
-        
+
         descendrePince();
         deposerBouchon();
+        bouchonAttrappe=false;
         monterPince();
         matriceB[posB_i][posB_j] = 2;
       
@@ -163,24 +196,16 @@ void loop() {
         Serial.println("Plus d'emplacements disponibles dans B.");
       }
 
-      // Marquer la case A comme vide
-      matriceA[posA_i][posA_j] = 0;
+     
     }
 
-    // Avancer dans matrice A
-    posA_j++;
-    if (posA_j >= NA) {
-      posA_j = 0;
-      posA_i++;
-    }
-
+    
     delay(100); // pour voir le 
     
     
 
   }
 
-    //verifier l'existance du bouchon (simuler le capteur)
   //si il y a un bouchon, faire descendre la pince (moteur Z)
     //attraper le bouchon (servo gripper)
     //faire monter la pince
@@ -262,6 +287,7 @@ void initialisationMatrices(){
     }
     Serial.println();
   }
+
   Serial.println("La matrice B:");
 
   for(int i=0; i<MB; i++){
