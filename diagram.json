@@ -138,14 +138,14 @@
       "id": "text6",
       "top": 470.4,
       "left": 441.6,
-      "attrs": { "text": "StepperX\n" }
+      "attrs": { "text": "StepperZ\n" }
     },
     {
       "type": "wokwi-text",
       "id": "text7",
       "top": 470.4,
       "left": 240,
-      "attrs": { "text": "StepperX\n" }
+      "attrs": { "text": "StepperY\n" }
     },
     {
       "type": "wokwi-pushbutton",
