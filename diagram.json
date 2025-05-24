@@ -160,6 +160,20 @@
       "top": 422.4,
       "left": -364.8,
       "attrs": { "text": "Bouton de départ\n" }
+    },
+    {
+      "type": "wokwi-pushbutton",
+      "id": "btn2",
+      "top": -377.8,
+      "left": -211.2,
+      "attrs": { "color": "red", "xray": "1" }
+    },
+    {
+      "type": "wokwi-text",
+      "id": "text9",
+      "top": -412.8,
+      "left": -230.4,
+      "attrs": { "text": "Arrêt d'urgence" }
     }
   ],
   "connections": [
@@ -223,7 +237,9 @@
     [ "esp:26", "limitX:2.r", "green", [ "h-115.05", "v57.6" ] ],
     [ "pot1:SIG", "esp:0", "green", [ "v-38.4", "h0.4", "v-38.4", "h-67.2", "v259.2" ] ],
     [ "esp:GND.2", "btn1:1.l", "black", [ "v-192", "h0", "v-67.2", "h-614.4", "v672" ] ],
-    [ "btn1:2.r", "esp:12", "green", [ "h29", "v-239.8", "h76.8", "v-86.4" ] ]
+    [ "btn1:2.r", "esp:12", "green", [ "h29", "v-239.8", "h76.8", "v-86.4" ] ],
+    [ "esp:GND.2", "btn2:2.r", "black", [ "v0" ] ],
+    [ "esp:21", "btn2:1.l", "green", [ "h28.8", "v-432", "h-316.8", "v76.8", "h9.6" ] ]
   ],
   "dependencies": {}
 }
