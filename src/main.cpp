@@ -1,27 +1,46 @@
-/*
- Controlling a servo position using a potentiometer (variable resistor)
- by Michal Rinott <http://people.interaction-ivrea.it/m.rinott>
-
- modified on 8 Nov 2013
- by Scott Fitzgerald
- http://www.arduino.cc/en/Tutorial/Knob
-*/
 #include <Arduino.h>
+#include <ESPAsyncWebSrv.h>
 #include <vector>
 #include <ESP32Servo.h>
 #include <AccelStepper.h>
 #include <WiFi.h>
 #include <WiFiClient.h>
-#include <WebServer.h>
 #include <uri/UriBraces.h>
+#include <ArduinoJson.h>
+
 
 #define WIFI_SSID "Wokwi-GUEST"
 #define WIFI_PASSWORD ""
 // Defining the WiFi channel speeds up the connection:
 #define WIFI_CHANNEL 6
+AsyncWebServer server(80);
 
-WebServer server(80);
+// Structure de configuration
+struct Parametre {
+  const char* nom;
+  int valeur;
+};
 
+Parametre config[] = {
+  {"Pas en mm pour moteur X", 10},
+  {"Pas en mm pour moteur y", 5},
+  {"Pas en mm pour moteur z", 2},
+  {"Nombre de lignes A", 10},
+  {"Nombre de colonnes A", 10},
+  {"Nombre de lignes B", 2},
+  {"Nombre de colonnes B", 3},
+  {"Pas entre deux positions sur l'axe X pour la matrice A", 5},
+  {"Pas entre deux positions sur l'axe Y pour la matrice A", 2},
+  {"Pas entre deux positions sur l'axe X pour la matrice B", 5},
+  {"Pas entre deux positions sur l'axe Y pour la matrice B", 1},
+  {"Position initiale sur l'axe X pour la matrice A", 50},
+  {"Position initiale sur l'axe Y pour la matrice A", 10},
+  {"Position initiale sur l'axe X pour la matrice B", 150},
+  {"Position initiale sur l'axe Y pour la matrice B", 20},
+  {"test", 0}
+};
+
+const int NB_PARAMS = sizeof(config) / sizeof(config[0]);
 
 //definitions des pins
 #define X_STEP_PIN 2
@@ -48,9 +67,9 @@ Servo myservo;  // create servo object to control a servo
 //declaration des variables
 int marche=false;
 //nbre de pas par mm pour chaque moteur (prévoir de les acquerrer depuis l'interface web)
-int nbre_pas_par_mm_pour_stepperX=10;
-int nbre_pas_par_mm_pour_stepperY=5;
-int nbre_pas_par_mm_pour_stepperZ=2;
+int nbre_pas_par_mm_pour_stepperX;
+int nbre_pas_par_mm_pour_stepperY;
+int nbre_pas_par_mm_pour_stepperZ;
 
 // Debounce variables
 unsigned long lastDebounceTime1 = 0;
@@ -59,26 +78,26 @@ const unsigned long debounceDelay = 50;
 bool bouchonAttrappe=false;
 
 //dimension de la matrice A
-int MA = 10;
-int NA = 10;
-std::vector<std::vector<int>> matriceA(MA, std::vector<int>(NA));
+int MA ;
+int NA ;
+std::vector<std::vector<int>> matriceA;
 
 //dimension de la matrice B
-int MB = 2;
-int NB = 3;
-std::vector<std::vector<int>> matriceB(MB, std::vector<int>(NB));
+int MB ;
+int NB;
+std::vector<std::vector<int>> matriceB;
 
 //les pas entre deux positions pour A et B en mm (prévoir de les calculer en pas) (prévoir de les acquérir depuis l'interface web)
-int pasAX = 5;
-int pasAY = 2;
-int pasBX = 5;
-int pasBY = 1;
+int pasAX ;
+int pasAY;
+int pasBX ;
+int pasBY ;
 
 //positions initiales pour les deux matrices en mm(prévoir de les calculer en pas) (prévoir de les acquérir depuis l'interface web)
-int posAX = 50 ;
-int posAY = 10;
-int posBX = 150 ;
-int posBY = 20;
+int posAX  ;
+int posAY ;
+int posBX  ;
+int posBY ;
 
 // position actuelle dans matrice A
 int posA_i = 0;
@@ -113,12 +132,10 @@ void setup() {
   Serial.begin(115200);
   initialisationWifi();
   initialisationHardware();
-  initialisationMatrices();
 
 }
 
 void loop() {
-  server.handleClient();
 
   //si on appuie sur le bouton DCY, on met la variable marche a true et le cycle commence ou continue selon les cas 
     if (digitalRead(homingButton) == LOW ) {
@@ -284,7 +301,136 @@ void initialisationWifi(){
 
   Serial.print("IP address: ");
   Serial.println(WiFi.localIP());
-  server.on("/", sendHtml);
+  // Page HTML (formulaire)
+  server.on("/", HTTP_GET, [](AsyncWebServerRequest *request){
+    String html = R"rawliteral(
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <meta charset="UTF-8">
+        <title>Configuration</title>
+        <style>
+          body {
+            font-family: Arial, sans-serif;
+            background-color: #f7f7f7;
+            padding: 20px;
+          }
+          h2 {
+            color: #333;
+          }
+          form {
+            max-width: 400px;
+            margin: auto;
+            background: white;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+          }
+          label {
+            display: block;
+            margin-top: 15px;
+            font-weight: bold;
+          }
+          input[type='number'] {
+            width: 100%;
+            padding: 8px;
+            margin-top: 5px;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+            box-sizing: border-box;
+          }
+          input[type='submit'] {
+            margin-top: 20px;
+            width: 100%;
+            padding: 10px;
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            font-size: 16px;
+            cursor: pointer;
+          }
+          input[type='submit']:hover {
+            background-color: #45a049;
+          }
+        </style>
+      </head>
+      <body>
+        <h2>Configuration du système</h2>
+        <form action="/save" method="get">
+    )rawliteral";
+  
+    for (int i = 0; i < NB_PARAMS; ++i) {
+      html += "<label for='";
+      html += config[i].nom;
+      html += "'>";
+      html += config[i].nom;
+      html += "</label><input type='number' name='";
+      html += config[i].nom;
+      html += "' value='";
+      html += config[i].valeur;
+      html += "'>\n";
+    }
+  
+    html += R"rawliteral(
+          <input type="submit" value="Enregistrer">
+        </form>
+      </body>
+      </html>
+    )rawliteral";
+  
+    request->send(200, "text/html", html);
+  });
+  
+
+  // Traitement des données reçues
+  server.on("/save", HTTP_GET, [](AsyncWebServerRequest *request){
+    
+    for (int i = 0; i < NB_PARAMS; ++i) {
+      if (request->hasParam(config[i].nom)) {
+        config[i].valeur = request->getParam(config[i].nom)->value().toInt();
+      }
+    }
+    //nbre de pas par mm pour chaque moteur (prévoir de les acquerrer depuis l'interface web)
+    nbre_pas_par_mm_pour_stepperX=config[0].valeur;
+    nbre_pas_par_mm_pour_stepperY=config[1].valeur;
+    nbre_pas_par_mm_pour_stepperZ=config[2].valeur;
+
+    //dimension de la matrice A
+    MA=config[3].valeur;
+    NA= config[4].valeur;    
+
+
+    //dimension de la matrice B
+    MB=config[5].valeur ;
+    NB= config[6].valeur;
+    std::vector<std::vector<int>> matriceB(MB, std::vector<int>(NB));
+    //les pas entre deux positions pour A et B en mm (prévoir de les calculer en pas) (prévoir de les acquérir depuis l'interface web)
+    pasAX=config[7].valeur;
+    pasAY=config[8].valeur;
+    pasBX=config[9].valeur;
+    pasBY=  config[10].valeur;
+
+    //positions initiales pour les deux matrices en mm(prévoir de les calculer en pas) (prévoir de les acquérir depuis l'interface web)
+    posAX = config[11].valeur;
+    posAY= config[12].valeur;
+    posBX  = config[13].valeur;
+    posBY = config[14].valeur;
+    Serial.println("La nouvelle valeur de test est :");
+    Serial.println(config[15].valeur);
+    
+    initialisationMatrices();
+
+    Serial.println("== Configuration mise à jour ==");
+    for (int i = 0; i < NB_PARAMS; ++i) {
+      Serial.print( config[i].nom );
+      Serial.print(": ");
+      Serial.println( config[i].valeur );
+
+    }
+  
+    request->send(200, "text/plain", "Configuration enregistrée !");
+  });
   server.begin();
   
 }
@@ -311,6 +457,9 @@ void initialisationHardware(){
 }
 
 void initialisationMatrices(){
+
+  matriceA = std::vector<std::vector<int>>(MA, std::vector<int>(NA));
+  matriceB = std::vector<std::vector<int>>(MB, std::vector<int>(NB));
   //initialisation des matrices
   //à faire par l'utilisateur pour indiquer les dimensions et les positions initiales
   //pour la simulation, on peut simplement donner des valeurs arbitraires (la matrice A est supposée pleine de bouchons)
@@ -464,37 +613,4 @@ void homing(){
   Serial.println("Moteurs calibrés");
 }
 
-void sendHtml() {
-  String response = R"(
-    <!DOCTYPE html><html>
-      <head>
-        <title>ESP32 Web Server Demo</title>
-        <meta name="viewport" content="width=device-width, initial-scale=1">
-        <style>
-          html { font-family: sans-serif; text-align: center; }
-          body { display: inline-flex; flex-direction: column; }
-          h1 { margin-bottom: 1.2em; } 
-          h2 { margin: 0; }
-          div { display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: auto auto; grid-auto-flow: column; grid-gap: 1em; }
-          .btn { background-color: #5B5; border: none; color: #fff; padding: 0.5em 1em;
-                 font-size: 2em; text-decoration: none }
-          .btn.OFF { background-color: #333; }
-        </style>
-      </head>
-            
-      <body>
-        <h1>ESP32 Web Server</h1>
 
-        <div>
-          <h2>LED 1</h2>
-          <a href="/toggle/1" class="btn LED1_TEXT">LED1_TEXT</a>
-          <h2>LED 2</h2>
-          <a href="/toggle/2" class="btn LED2_TEXT">LED2_TEXT</a>
-        </div>
-      </body>
-    </html>
-  )";
-  // response.replace("LED1_TEXT", led1State ? "ON" : "OFF");
-  // response.replace("LED2_TEXT", led2State ? "ON" : "OFF");
-  server.send(200, "text/html", response);
-}
